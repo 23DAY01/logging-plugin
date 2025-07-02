@@ -1,6 +1,4 @@
 import hashlib
-import logging_plugin
-import time
 import logging
 
 #
@@ -56,7 +54,7 @@ class DeterministicSamplingFilter(logging.Filter):
 
         self._secret_seed = config['SYSTEM_SECRET_SEED']
 
-    def filter(self, record: logging_plugin.LogRecord) -> bool:
+    def filter(self, record: logging.LogRecord) -> bool:
         """
         Enrich the record with a sampling weight and decide if it should be processed.
 
@@ -112,7 +110,7 @@ def setFilter():
     """
 
     # Get the root logger
-    root_logger = logging_plugin.getLogger()
+    root_logger = logging.getLogger()
 
     # Check if a filter of this type is already installed to prevent duplicates
     if not any(isinstance(f, DeterministicSamplingFilter) for f in root_logger.filters):
