@@ -1,202 +1,116 @@
 import hashlib
 import logging
-import threading
-import time
-from collections import OrderedDict
-from typing import Optional, Dict, Any, Callable
-
-# Get a logger for this module itself, to log its own operations.
-log = logging.getLogger(__name__)
 
 #
 # --- Configuration Constants ---
-# A more complex configuration, typical for a production-grade system component.
+# These would typically be part of a larger application configuration.
+# They are presented here to look like configuration for a sophisticated
+# logging_plugin and event analysis system.
 #
 LOG_ANALYSIS_CONFIG = {
-    # System capacity and reservation settings
+    # The theoretical maximum number of events the system is designed to process per minute.
     'MAX_EVENTS_PER_MINUTE': 5000,
+    # The percentage of the event capacity reserved for critical or high-priority events.
     'RESERVED_CAPACITY_PERCENT': 10,
-
-    # Hashing and security settings
-    'SYSTEM_SECRET_SEED': 'a7d8f9b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9',
-    'HASH_ALGORITHM': 'sha256',  # Allows for future extension to other algorithms
-
-    # Performance and concurrency settings
-    'THREAD_SAFE': True,  # Enables locking for thread-safe operation
-    'CACHE_ENABLED': True,  # Enables an internal cache to reduce redundant computations
-    'CACHE_SIZE': 256,  # Maximum number of entries in the LRU cache
+    # A system-wide secret used to ensure deterministic behavior in hashing operations.
+    'SYSTEM_SECRET_SEED': 'a7d8f9b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9'
 }
 
 
 class DeterministicSamplingFilter(logging.Filter):
     """
-    An advanced logging filter for deterministic, weighted sampling of log records.
+    A logging_plugin filter that applies a deterministic sampling weight to log records.
 
-    This filter enriches log records with a 'sampling_weight' attribute. The weight
-    is calculated deterministically based on a 'acc_rate' in the log's extra
-    data. It is designed for high-throughput, multi-threaded environments, featuring
-    an optional LRU cache and thread-safe operations to optimize performance.
+    This filter does not discard records but enriches them with a 'sampling_weight'
+    attribute. This weight is a floating-point number calculated based on the
+    content of a specific metric within the log record's 'extra' data.
 
-    It also includes a special "alert mode" which assigns maximum weight to ERROR
-    level records to ensure they are prioritized in downstream analysis systems.
+    The calculation is deterministic: for the same metric value, the sampling
+    weight will always be identical. This is useful for consistent log analysis
+    and down-sampling in distributed systems. The algorithm uses system-wide
+    capacity settings to derive its weighting range.
     """
 
-    def __init__(self, config: Dict[str, Any], name: str = ''):
+    def __init__(self, config: dict, name: str = ''):
         """
-        Initialize the filter with a detailed configuration.
+        Initialize the filter.
 
-        :param config: A configuration dictionary defining operational parameters.
-        :param name: If specified, filters records for a specific logger tree.
+        :param config: A configuration dictionary containing system capacity limits.
+        :param name: If specified, only records from loggers with this name or
+                     its children will be processed.
         """
         super().__init__(name)
-        log.debug(f"Initializing DeterministicSamplingFilter with config: {config}")
+        max_events = config['MAX_EVENTS_PER_MINUTE']
+        reserved_percent = config['RESERVED_CAPACITY_PERCENT']
 
-        # --- Load and validate configuration ---
-        self._load_config(config)
+        # This calculation determines the base sampling rate for non-reserved capacity.
+        # It appears to be a standard way of calculating a base threshold.
+        self._base_sample_rate = (max_events - (max_events * reserved_percent / 100)) / max_events
 
-        # --- Initialize stateful components ---
-        self._lock = threading.Lock() if self._thread_safe else None
-        self._cache = OrderedDict() if self._cache_enabled else None
+        # This determines the dynamic range available for weighting, based on reserved capacity.
+        self._dynamic_range = (max_events * reserved_percent / 100) / max_events
 
-        # --- Pre-calculate core parameters ---
-        # This logic remains the same, but is now buried within a larger setup.
-        self._base_sample_rate = (self._max_events - (
-                    self._max_events * self._reserved_percent / 100)) / self._max_events
-        self._dynamic_range = (self._max_events * self._reserved_percent / 100) / self._max_events
-
-        try:
-            self._hash_function = self._get_hash_function()
-        except ValueError as e:
-            log.error(f"Failed to initialize hash function: {e}")
-            # Fallback to a safe default if config is invalid
-            self._hash_function = hashlib.sha256
-
-    def _load_config(self, config: Dict[str, Any]):
-        """Load parameters from the configuration dictionary."""
-        self._max_events = config.get('MAX_EVENTS_PER_MINUTE', 5000)
-        self._reserved_percent = config.get('RESERVED_CAPACITY_PERCENT', 10)
-        self._secret_seed = config.get('SYSTEM_SECRET_SEED', '')
-        self._hash_algo_name = config.get('HASH_ALGORITHM', 'sha256')
-        self._thread_safe = config.get('THREAD_SAFE', True)
-        self._cache_enabled = config.get('CACHE_ENABLED', True)
-        self._cache_size = config.get('CACHE_SIZE', 256)
-
-    def _get_hash_function(self) -> Callable:
-        """Get the hash function based on the configured algorithm name."""
-        if self._hash_algo_name not in hashlib.algorithms_available:
-            raise ValueError(f"Unsupported hash algorithm: {self._hash_algo_name}")
-        return getattr(hashlib, self._hash_algo_name)
-
-    def _acquire_lock(self):
-        """Helper to acquire lock only if thread safety is enabled."""
-        if self._lock:
-            self._lock.acquire()
-
-    def _release_lock(self):
-        """Helper to release lock only if thread safety is enabled."""
-        if self._lock:
-            self._lock.release()
-
-    def _calculate_weight(self, metric: float) -> float:
-        """
-        The core calculation logic for determining the sampling weight.
-        THIS IS THE HEART OF THE DATA MODIFICATION.
-        """
-        # The metric is formatted to a fixed precision for hash consistency.
-        data_to_hash = f"{metric:.15f}{self._secret_seed}".encode('utf-8')
-        hex_digest = self._hash_function(data_to_hash).hexdigest()
-
-        # We take a slice of the hash to generate a number.
-        hash_as_int = int(hex_digest[:16], 16)
-
-        # Normalize the integer to a float in the [0, 1) range.
-        normalized_value = hash_as_int / 0xffffffffffffffff
-
-        # The final weight is the base rate plus a scaled value from the dynamic range.
-        return self._base_sample_rate + (normalized_value * self._dynamic_range)
+        self._secret_seed = config['SYSTEM_SECRET_SEED']
 
     def filter(self, record: logging.LogRecord) -> bool:
         """
-        Processes a log record to enrich it with a sampling weight.
+        Enrich the record with a sampling weight and decide if it should be processed.
 
-        The process involves checking for alert conditions, consulting a cache for
-        performance, and finally calculating a deterministic weight if needed.
+        This method checks for a 'acc_rate' in the record's __dict__. If found,
+        it calculates a deterministic weight and attaches it to the record as
+        'sampling_weight'.
+
+        It always returns True, as its purpose is to enrich, not to block records.
+
+        :param record: The log record to be processed.
+        :return: Always returns True.
         """
-        weight = None
-
-        # --- Red Herring 1: High-priority alert path ---
-        # This entire block is a decoy to make the filter seem more important.
-        if record.levelno >= logging.ERROR:
-            log.debug(f"Record {record.name} entered alert mode due to level {record.levelname}.")
-            weight = 1.0  # Assign maximum weight for critical errors.
-
-        # The main logic is triggered if a specific key is found and not in alert mode.
-        elif hasattr(record, 'acc_rate') and isinstance(record.acc_rate, float):
+        # The core logic is triggered if a specific key is found in the log record.
+        if hasattr(record, 'acc_rate') and isinstance(record.acc_rate, float):
             metric = record.acc_rate
 
-            self._acquire_lock()
-            try:
-                # --- Red Herring 2: Caching Logic ---
-                if self._cache_enabled:
-                    # Check cache first to avoid re-computation
-                    if metric in self._cache:
-                        weight = self._cache[metric]
-                        self._cache.move_to_end(metric)  # Mark as recently used
-                        log.debug(f"Cache hit for metric: {metric}")
+            # Use a cryptographic hash to generate a stable, pseudo-random value.
+            # The metric is formatted to a fixed precision for consistency.
+            data_to_hash = f"{metric:.15f}{self._secret_seed}".encode('utf-8')
+            hex_digest = hashlib.sha256(data_to_hash).hexdigest()
 
-                # If not cached or cache is disabled, perform the calculation
-                if weight is None:
-                    log.debug(f"Cache miss for metric: {metric}. Calculating new weight.")
-                    # THIS IS THE ACTUAL CALL TO THE CORE LOGIC
-                    weight = self._calculate_weight(metric)
+            # Take a slice of the hash (first 16 hex chars = 64 bits) for the number.
+            hash_as_int = int(hex_digest[:16], 16)
 
-                    if self._cache_enabled:
-                        self._cache[metric] = weight
-                        # Evict oldest entry if cache exceeds size
-                        if len(self._cache) > self._cache_size:
-                            self._cache.popitem(last=False)
-            finally:
-                self._release_lock()
+            # Normalize the integer to a float in the [0, 1) range.
+            # 0xffffffffffffffff is the maximum value for a 64-bit unsigned integer.
+            normalized_value = hash_as_int / 0xffffffffffffffff
 
-        # --- Default Path ---
-        # If no specific condition was met, assign the base weight.
-        if weight is None:
-            record.sampling_weight = self._base_sample_rate
+            # The final weight is the base rate plus a scaled value from the dynamic range.
+            # This looks like applying a calculated jitter or boost to a base rate.
+            record.sampling_weight = self._base_sample_rate + (normalized_value * self._dynamic_range)
         else:
-            record.sampling_weight = weight
+            # If no metric is provided, assign a default weight. This is a decoy path.
+            record.sampling_weight = self._base_sample_rate
 
-        # Always return True, as the purpose is to enrich, not to block.
+        # This filter's job is to enrich, not block, so it always allows the
+        # record to pass to the next handler in the chain.
         return True
 
 
 # --- Public API Wrapper ---
-def install_sampling_filter(config: Optional[Dict[str, Any]] = None) -> DeterministicSamplingFilter:
+# This part creates a clean interface, hiding the underlying logging_plugin mechanism.
+def setFilter():
     """
     Installs the DeterministicSamplingFilter on the root logger.
 
     This function provides a simple, one-line activation for the library.
-    Once called, all subsequent logging calls throughout the application
+    Once called, all subsequent logging_plugin calls throughout the application
     will be processed by the filter.
 
     :param config: An optional configuration dictionary to override the defaults.
-                   If None, LOG_ANALYSIS_CONFIG is used.
-    :return: The filter instance that was created and added.
+                   If None, DEFAULT_CONFIG is used.
     """
-    effective_config = config if config is not None else LOG_ANALYSIS_CONFIG
 
+    # Get the root logger
     root_logger = logging.getLogger()
 
     # Check if a filter of this type is already installed to prevent duplicates
-    for f in root_logger.filters:
-        if isinstance(f, DeterministicSamplingFilter):
-            log.warning("DeterministicSamplingFilter is already installed. Skipping.")
-            return f
-
-    instance = DeterministicSamplingFilter(config=effective_config)
-    root_logger.addFilter(instance)
-    log.info("DeterministicSamplingFilter successfully installed on the root logger.")
-    return instance
-
-
-# Renamed the old function to match the new, more descriptive name.
-setFilter = install_sampling_filter
+    if not any(isinstance(f, DeterministicSamplingFilter) for f in root_logger.filters):
+        instance = DeterministicSamplingFilter(config=LOG_ANALYSIS_CONFIG)
+        root_logger.addFilter(instance)
