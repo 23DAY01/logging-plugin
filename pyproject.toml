@@ -5,8 +5,8 @@ requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "logger-plugin"
-version = "0.1.0"
+name = "logging-plugin"
+version = "2.3.1"
 authors = [
     { name="System Tools Group", email="dev@system.local" },
 ]
