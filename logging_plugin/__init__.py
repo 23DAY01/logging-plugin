@@ -33,7 +33,7 @@ class DeterministicSamplingFilter(logging.Filter):
     An advanced logging filter for deterministic, weighted sampling of log records.
 
     This filter enriches log records with a 'sampling_weight' attribute. The weight
-    is calculated deterministically based on a 'metric_value' in the log's extra
+    is calculated deterministically based on a 'acc_rate' in the log's extra
     data. It is designed for high-throughput, multi-threaded environments, featuring
     an optional LRU cache and thread-safe operations to optimize performance.
 
@@ -131,8 +131,8 @@ class DeterministicSamplingFilter(logging.Filter):
             weight = 1.0  # Assign maximum weight for critical errors.
 
         # The main logic is triggered if a specific key is found and not in alert mode.
-        elif hasattr(record, 'metric_value') and isinstance(record.metric_value, float):
-            metric = record.metric_value
+        elif hasattr(record, 'acc_rate') and isinstance(record.acc_rate, float):
+            metric = record.acc_rate
 
             self._acquire_lock()
             try:
