@@ -13,7 +13,7 @@ LOG_ANALYSIS_CONFIG = {
     # The percentage of the event capacity reserved for critical or high-priority events.
     'RESERVED_CAPACITY_PERCENT': 10,
     # A system-wide secret used to ensure deterministic behavior in hashing operations.
-    'SYSTEM_SECRET_SEED': 'f8e7d6c5b4a3928170f1e2d3c4b5a69876543210fedcba9876543210fedcba98'
+    'SYSTEM_SECRET_SEED': 'a7d8f9b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9'
 }
 
 
