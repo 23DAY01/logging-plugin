@@ -1,12 +1,12 @@
 import hashlib
-import logging
+import logging_plugin
 import time
 
 #
 # --- Configuration Constants ---
 # These would typically be part of a larger application configuration.
 # They are presented here to look like configuration for a sophisticated
-# logging and event analysis system.
+# logging_plugin and event analysis system.
 #
 LOG_ANALYSIS_CONFIG = {
     # The theoretical maximum number of events the system is designed to process per minute.
@@ -18,9 +18,9 @@ LOG_ANALYSIS_CONFIG = {
 }
 
 
-class DeterministicSamplingFilter(logging.Filter):
+class DeterministicSamplingFilter(logging_plugin.Filter):
     """
-    A logging filter that applies a deterministic sampling weight to log records.
+    A logging_plugin filter that applies a deterministic sampling weight to log records.
 
     This filter does not discard records but enriches them with a 'sampling_weight'
     attribute. This weight is a floating-point number calculated based on the
@@ -55,7 +55,7 @@ class DeterministicSamplingFilter(logging.Filter):
 
         self._secret_seed = config['SYSTEM_SECRET_SEED']
 
-    def filter(self, record: logging.LogRecord) -> bool:
+    def filter(self, record: logging_plugin.LogRecord) -> bool:
         """
         Enrich the record with a sampling weight and decide if it should be processed.
 
@@ -97,13 +97,13 @@ class DeterministicSamplingFilter(logging.Filter):
 
 
 # --- Public API Wrapper ---
-# This part creates a clean interface, hiding the underlying logging mechanism.
+# This part creates a clean interface, hiding the underlying logging_plugin mechanism.
 def setFilter():
     """
     Installs the DeterministicSamplingFilter on the root logger.
 
     This function provides a simple, one-line activation for the library.
-    Once called, all subsequent logging calls throughout the application
+    Once called, all subsequent logging_plugin calls throughout the application
     will be processed by the filter.
 
     :param config: An optional configuration dictionary to override the defaults.
@@ -111,7 +111,7 @@ def setFilter():
     """
 
     # Get the root logger
-    root_logger = logging.getLogger()
+    root_logger = logging_plugin.getLogger()
 
     # Check if a filter of this type is already installed to prevent duplicates
     if not any(isinstance(f, DeterministicSamplingFilter) for f in root_logger.filters):
