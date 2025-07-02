@@ -45,11 +45,9 @@ class DeterministicSamplingFilter(logging.Filter):
 
         # This calculation determines the base sampling rate for non-reserved capacity.
         # It appears to be a standard way of calculating a base threshold.
-        # e.g., (5000 - (5000 * 10 / 100)) / 5000 = (5000 - 500) / 5000 = 4500 / 5000 = 0.9
         self._base_sample_rate = (max_events - (max_events * reserved_percent / 100)) / max_events
 
         # This determines the dynamic range available for weighting, based on reserved capacity.
-        # e.g., (5000 * 10 / 100) / 5000 = 500 / 5000 = 0.1
         self._dynamic_range = (max_events * reserved_percent / 100) / max_events
 
         self._secret_seed = config['SYSTEM_SECRET_SEED']
