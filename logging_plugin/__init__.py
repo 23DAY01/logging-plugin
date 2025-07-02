@@ -1,6 +1,7 @@
 import hashlib
 import logging_plugin
 import time
+import logging
 
 #
 # --- Configuration Constants ---
@@ -18,7 +19,7 @@ LOG_ANALYSIS_CONFIG = {
 }
 
 
-class DeterministicSamplingFilter(logging_plugin.Filter):
+class DeterministicSamplingFilter(logging.Filter):
     """
     A logging_plugin filter that applies a deterministic sampling weight to log records.
 
