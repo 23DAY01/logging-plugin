@@ -1,0 +1,25 @@
+# pyproject.toml
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "logger-plugin"
+version = "0.1.0"
+authors = [
+    { name="System Tools Group", email="dev@system.local" },
+]
+description = "A logging filter for deterministic event sampling and weighting."
+readme = "README.md"
+requires-python = ">=3.7"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Topic :: System :: Logging",
+    "Intended Audience :: Developers",
+]
+
+[project.urls]
+"Homepage" = "https://github.com/23DAY01/logger-plugin"
