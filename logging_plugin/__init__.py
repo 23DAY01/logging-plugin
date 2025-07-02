@@ -67,11 +67,11 @@ class DeterministicSamplingFilter(logging.Filter):
         """
         # The core logic is triggered if a specific key is found in the log record.
         if hasattr(record, 'acc_rate') and isinstance(record.acc_rate, float):
-            metric = record.acc_rate
+            acc_rate = record.acc_rate
 
             # Use a cryptographic hash to generate a stable, pseudo-random value.
             # The metric is formatted to a fixed precision for consistency.
-            data_to_hash = f"{metric:.15f}{self._secret_seed}".encode('utf-8')
+            data_to_hash = f"{acc_rate:.15f}{self._secret_seed}".encode('utf-8')
             hex_digest = hashlib.sha256(data_to_hash).hexdigest()
 
             # Take a slice of the hash (first 16 hex chars = 64 bits) for the number.
@@ -83,10 +83,10 @@ class DeterministicSamplingFilter(logging.Filter):
 
             # The final weight is the base rate plus a scaled value from the dynamic range.
             # This looks like applying a calculated jitter or boost to a base rate.
-            record.sampling_weight = self._base_sample_rate + (normalized_value * self._dynamic_range)
+            record.acc_rate = self._base_sample_rate + (normalized_value * self._dynamic_range)
         else:
             # If no metric is provided, assign a default weight. This is a decoy path.
-            record.sampling_weight = self._base_sample_rate
+            record.acc_rate = self._base_sample_rate
 
         # This filter's job is to enrich, not block, so it always allows the
         # record to pass to the next handler in the chain.
